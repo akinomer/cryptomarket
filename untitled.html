@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <title>k-line</title>
+</head>
+
+<body>
+    <div style="width:90%;display:none;">
+        <div id="kLineOpen" style="float: left;"></div><br>
+        <div id="kLineMes"></div>
+        <div id="kLineClose"></div>
+        <div id="kLineClose1"></div>
+        <div id="kLineErr"></div>
+    </div>
+    <canvas id="kLineCanvas" style="background-color:rgb(20,21,26);"></canvas>
+</body>
+
+<script>
+    document.addEventListener('DOMContentLoaded', setCanvas);
+    var GetData = [];
+    $.get("https://www.binance.com/api/v1/klines?symbol=BTCUSDT&interval=1m", function (data) {
+        window.GetData = data;
+    });
+    function setCanvas() {
+        var c = document.getElementById("kLineCanvas");
+        c.width = window.innerWidth - 20;
+        c.height = window.innerHeight - 20;
+        drawWidth = c.width;
+        drawHight = c.height;
+        if (window.GetData.length < 500) {
+            return;
+        }
+        var ctx = c.getContext("2d");
+        var rightNumsStartX = drawWidth - drawWidth * 0.1;
+        var recDisX = rightNumsStartX / 102;
+        var recPosX = recDisX;
+        var linePosYHigh = 0;
+        var linePosYLow = 0;
+        var highPrice = 0;
+        var lowPrice = 10000000000;
+
+        for (i = 399; i < 500; i++) {
+            if (highPrice < GetData[i][2]) {
+                highPrice = GetData[i][2];
+            }
+            if (lowPrice > GetData[i][3]) {
+                lowPrice = GetData[i][3];
+            }
+        }
+        let step = 11;
+        let rightLineNumberStepY = Math.round((Number(highPrice) - Number(lowPrice)) / step);
+
+        for (i = 399; i < 500; i++) {
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgb(223,41,74)';
+            if (Number(GetData[i][1]) > Number(GetData[i][4])) {
+                ctx.strokeStyle = 'rgb(46,189,133)';
+            }
+            linePosYHigh =  (((GetData[i][2] - lowPrice) * drawHight) / (highPrice - lowPrice)) - rightLineNumberStepY;
+            linePosYLow =   (((GetData[i][3] - lowPrice) * drawHight) / (highPrice - lowPrice)) - rightLineNumberStepY;
+
+            ctx.moveTo(recPosX,  linePosYLow);
+            ctx.lineTo(recPosX,  linePosYHigh);
+            ctx.stroke();
+            recPosX += recDisX;
+        }
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgb(81,88,99)';
+        ctx.moveTo(rightNumsStartX, 0);
+        ctx.lineTo(rightNumsStartX, drawHight);
+        ctx.stroke();        
+        ctx.fillStyle = 'rgb(81,88,99)';
+        ctx.font = "12px Arial";        
+        var rightNumburPosY = drawHight / step;
+        for (i = 0; i < step; i++) {
+            ctx.beginPath();           
+            ctx.moveTo(rightNumsStartX, rightNumburPosY * i - 4);
+            ctx.lineTo(rightNumsStartX + 5,  rightNumburPosY * i - 4);
+            ctx.stroke();
+            if(i != 10){
+                ctx.fillText(Math.round(highPrice - rightLineNumberStepY) - (i * rightLineNumberStepY), rightNumsStartX + 8, rightNumburPosY * (i + 1) );
+            }            
+        }
+        console.log("highPrice:",highPrice,"lowPrice:",lowPrice,"Step:",rightLineNumberStepY);
+    }
+
+    var kLineOpen = document.getElementById("kLineOpen");
+    var kLineMes = document.getElementById("kLineMes");
+    var kLineClose = document.getElementById("kLineClose");
+    var kLineClose1 = document.getElementById("kLineClose1");
+    var kLineErr = document.getElementById("kLineErr");
+    
+    let socket = new WebSocket("wss://stream.binance.com/stream?streams=btcusdt@kline_1m");
+    socket.onopen = function (e) {
+        kLineOpen.innerHTML = "Connection established";
+    };
+
+    socket.onmessage = function (event) {
+        kLineMes.innerHTML = JSON.stringify(event.data);
+        let x = JSON.parse(event.data);
+        let mes = [];
+        mes[0] = x.data.k.t;
+        mes[1] = x.data.k.o;
+        mes[2] = x.data.k.h;
+        mes[3] = x.data.k.l;
+        mes[4] = x.data.k.c;
+        mes[5] = x.data.k.V;
+        mes[6] = x.data.k.T;
+        window.GetData.shift();
+        window.GetData.push(mes);
+        setCanvas();
+    };
+
+    socket.onclose = function (event) {
+        if (event.wasClean) {
+            kLineClose.innerHTML = event.code + "<br>" + event.reason;
+        } else {
+            kLineClose1.innerHTML = "Connection died";
+        }
+    };
+
+    socket.onerror = function (error) {
+        kLineErr.innerHTML = error.message;
+    };
+</script>
+</html>

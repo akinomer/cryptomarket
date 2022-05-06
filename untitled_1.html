@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>bigo-chart example</title>
+    <link rel="stylesheet" type="text/css" href="../dist/chart.css" />
+    <style>
+      * {
+        padding: 0;
+        margin: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        cursor: ne-resize;
+      }
+      #chart {
+        height: 80%;
+        width: 100%;
+      }
+      button {
+        padding: 5px 20px;
+        margin: 10px 0 10px 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <button onclick="switchChart('1m','line')">time</button>
+    <button onclick="switchChart('1m')">1m</button>
+    <button onclick="switchChart('5m')">5m</button>
+    <button onclick="switchChart('1d')">1day</button>
+    <div id="chart"></div>
+    <script src="./axios.js"></script>
+    <script src="../dist/index.js"></script>
+    <script>
+      /***** IMPORTANT! 由于需要对接币安API,请使用科学上网 *****/
+      
+      //https://github.com/HDhuangdi/bigo-chart/tree/6447b14203399271c6fdd9517b93599642bc082e
+      const http = axios.create({
+        baseURL: "https://api.binance.com",
+      })
+      let chart
+      let chartType = 1
+
+      function initChart(bars) {
+        chart = new BigoChart({
+          interval: "1m",
+          el: "#chart",
+          bars,
+          symbol: "ETH",
+          hasVolume: true,
+          logo: "./logo.png",
+          chartType,
+          loadMore: async (endTime) => getKline(endTime, "1m"),
+        })
+      }
+
+      function getKline(endTime, interval) {
+        return new Promise((resolve) => {
+          http
+            .get(
+              `/api/v3/klines?symbol=ETHUSDT&interval=${interval}&endTime=${endTime}`
+            )
+            .then(({ data }) => {
+              let bars = data.map((item) => ({
+                time: Number(item[0]),
+                open: Number(item[1]),
+                high: Number(item[2]),
+                low: Number(item[3]),
+                close: Number(item[4]),
+                volume: Number(item[5]),
+              }))
+              resolve(bars)
+            })
+        })
+      }
+
+      function switchChart() {
+        if (!chart) return
+        if (chartType === 1) {
+          chartType = 2
+        } else {
+          chartType = 1
+        }
+        chart.setChartType(chartType)
+      }
+
+      function switchChart(interval, chartType) {
+        if (!chart) return
+        if (chartType === "line") {
+          chartType = 1
+        } else {
+          chartType = 2
+        }
+        const endTime = new Date().getTime()
+        getKline(endTime, interval).then((bars) => {
+          chart.setOptions({
+            bars,
+            chartType,
+            loadMore: async (endTime) => getKline(endTime, interval),
+          })
+        })
+      }
+
+      const endTime = new Date().getTime()
+      getKline(endTime, "1m").then((bars) => {
+        initChart(bars)
+      })
+
+      // SUBSCRIBE DATA
+      const ws = new WebSocket("wss://stream.binance.com/stream")
+
+      const msg = JSON.stringify({
+        method: "SUBSCRIBE",
+        params: ["ethusdt@aggTrade"],
+        id: 1,
+      })
+
+      ws.onopen = () => {
+        ws.send(msg)
+      }
+
+      ws.onmessage = (e) => {
+        if (!chart) return
+        let data = JSON.parse(e.data)
+        if (!data.data) return
+        let time = data.data.T
+        let close = Number(data.data.p)
+        let volume = Number(data.data.q)
+        chart.subscribeBars(close, volume, time)
+      }
+    </script>
+  </body>
+</html>
